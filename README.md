@@ -13,12 +13,14 @@ If you want to learn about technical analysis, here are some resources:
 * https://chartchampions.com/
 * https://jaysoncaspertrading.com/
 
-Both of the above also have YouTube channels with some free content>
+Both of the above also have YouTube channels with some free content.
 
 Other YouTube channels that provide good content include:
 
 * [Benjamin Cowen](https://www.youtube.com/channel/UCRvqjQPSeaWn-uEx-w0XOIg)
 * [Eric Krown Crypto](https://www.youtube.com/channel/UCnwxzpFzZNtLH8NgTeAROFA)
+
+It is highly recommended to stay away from any other crypto YouTube channels.
 
 For any strategy, it is important to consider volume (what big traders and entities are doing), and it also helps to add order flow analysis and data to any strategy. (e.g. from https://exocharts.com/)  Learning about Elliot Wave Theory can also be helpful.
 
