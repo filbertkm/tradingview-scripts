@@ -1,0 +1,12 @@
+indicator('Volume Oscillator')
+
+shortlen = input.int(5, minval=1, title = "Short Length")
+longlen = input.int(10, minval=1, title = "Long Length")
+
+var cumVol = 0.
+cumVol += nz(volume)
+if barstate.islast and cumVol == 0
+    runtime.error("No volume is provided by the data vendor.")
+short = ta.ema(volume, shortlen)
+long = ta.ema(volume, longlen)
+osc = 100 * (short - long) / long

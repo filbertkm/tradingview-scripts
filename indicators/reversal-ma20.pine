@@ -1,0 +1,72 @@
+//@version=5
+indicator(shorttitle="Reversal Finder", title="Reversal Finder", overlay=false, timeframe="")
+
+maLength = input.int(20, "K", minval=1)
+rsiLength = input.int(13, "D", minval=1)
+
+volMA = ta.sma(volume, 20)
+rsiVolMA = ta.rsi(volMA, 13)
+
+rsiVol = ta.rsi(volume, 14)
+
+ma20 = ta.sma(close, maLength)
+rsiMA20 = ta.rsi(ma20, rsiLength)
+
+rsi = ta.rsi(close, 14)
+rsiEma = ta.ema(rsi, 14)
+
+[ma205m, rsi5m] = request.security(syminfo.tickerid, '5', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma2015m, rsi15m] = request.security(syminfo.tickerid, '15', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma2030m, rsi30m] = request.security(syminfo.tickerid, '30', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma201h, rsi1h] = request.security(syminfo.tickerid, '60', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma202h, rsi2h] = request.security(syminfo.tickerid, '120', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma203h, rsi3h] = request.security(syminfo.tickerid, '180', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma204h, rsi4h] = request.security(syminfo.tickerid, '240', [ta.sma(close, 20), ta.rsi(close, 14)])
+[ma206h, rsi6h] = request.security(syminfo.tickerid, '360', [ta.sma(close, 20), ta.rsi(close, 14)])
+
+rsiMA5m = ta.rsi(ma205m, 13)
+rsiMA15m = ta.rsi(ma2015m, 13)
+rsiMA30m = ta.rsi(ma2030m, 13)
+rsiMA201h = ta.rsi(ma201h, 13)
+rsiMA202h = ta.rsi(ma202h, 13)
+rsiMA203h = ta.rsi(ma203h, 13)
+rsiMA204h = ta.rsi(ma204h, 13)
+rsiMA206h = ta.rsi(ma206h, 13)
+
+maRsiAvg = (rsiMA5m + rsiMA15m + rsiMA30m + rsiMA201h + rsiMA202h + rsiMA203h + rsiMA204h + rsiMA206h) / 8
+
+rsiUp = ta.rising(rsi, 1)
+emaUp = ta.rising(rsiMA20, 1)
+rsiEmaUp = ta.rising(rsiEma, 1)
+
+rsiMAPivotUp = emaUp and emaUp[1] != true
+rsiMAPivotDown = emaUp != true and emaUp[1]
+
+rsiEmaPivotUp = rsiEmaUp and rsiEmaUp[1] != true
+rsiEmaPivotDown = rsiEmaUp != true and rsiEmaUp[1]
+
+rsiPivotUp = rsiUp and rsiUp[1] != true
+rsiPivotDown = rsiUp != true and rsiUp[1]
+
+isLongPivotAlert = rsiMAPivotUp and (rsiMA20 < maRsiAvg) and maRsiAvg < 25
+isShortPivotAlert = rsiPivotDown and (rsiMA20 > maRsiAvg) and maRsiAvg > 40
+
+isLongAlert = rsiMAPivotUp and isLongPivotAlert != true and (rsiMA20 < rsiEma) and rsiEmaUp and rsiMA20 < 10 and maRsiAvg < 25
+isShortAlert = rsiPivotDown and isShortPivotAlert != true and (rsiMA20 > rsiEma) and rsiEmaUp != true and rsiMA20 > 90 and maRsiAvg> 75
+
+isLong = rsiMA20 < 2
+isShort = rsiMA20 > 98
+
+bgColor = isShort ? color.new(color.red, 90) : isLong ? color.new(color.green, 90) : na
+
+p1 = plot(98, "Upper", color=color.new(color.white, 20))
+p2 = plot(2, "Lower", color=color.new(color.white, 20))
+fill(p1, p2, title = "Background", color=bgColor)
+
+plot(rsiMA20, title='MA20 RSI', color=emaUp ? color.new(color.green, 50) : color.new(color.red, 50), linewidth=4)
+
+plotshape(isLongAlert ? -10 : na, title='MA-RSI Pivot Low Up', style=shape.circle, color=color.new(color.green, 50), location=location.absolute, size=size.tiny)
+plotshape(isShortAlert ? 110 : na, title='MA-RSI Pivot High Down', style=shape.circle, color=color.new(color.red, 50), location=location.absolute, size=size.tiny)
+
+alertcondition(longAlert, 'MA20 LONG', 'MA20 LONG')
+alertcondition(shortAlert, 'MA20 SHORT', 'MA20 SHORT')

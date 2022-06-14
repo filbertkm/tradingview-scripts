@@ -1,0 +1,50 @@
+//@version=5
+indicator(title='EMA-multi', shorttitle='EMA-multi', overlay=true, timeframe='', timeframe_gaps=true)
+
+bandWidthPercent = input.float(1.0, title="Band Width Percentage")
+
+atrLength = input.int(title="ATR Length", defval = 14)
+atrMulti = input.float(title="ATR multiplier", defval = 1.0)
+
+showBands = input.bool(false, title = "Show Band areas")
+
+var color C_EMA_1H_13 = #5CA661
+var color C_EMA_1H_50 = #EC407A
+var color C_EMA_1H_200 = #E1BEE7
+var color C_EMA_4H_200 = #26C6DA
+var color C_EMA_1D_50 = #AA0FDD
+var color C_EMA_1D_200 = #F48FB1
+var color C_EMA_1W_21 = #A5D6A7
+var color C_EMA_1W_50 = #2196F3
+var color C_MA_200W = #D125CE
+
+[ema1h13, ema1h50, ema1h200] = request.security(syminfo.tickerid, '60', [ta.ema(close, 13), ta.ema(close, 50), ta.ema(close, 200)])
+[ema4h200] = request.security(syminfo.tickerid, '240', [ta.ema(close, 200)])
+[ema1d50, ema1d200] = request.security(syminfo.tickerid, '1D', [ta.ema(close, 50), ta.ema(close, 200)])
+[ema1w21, ema1w50, ma200w] = request.security(syminfo.tickerid, '1W', [ta.ema(close, 21), ta.ema(close, 50), ta.sma(close, 200)])
+
+bandSize = (close / 100) * bandWidthPercent
+
+atr = ta.atr(atrLength)
+
+plot(ema1h13, title='1H 13 EMA', color=color.new(C_EMA_1H_13, 20), linewidth=4)
+plot(ema1h50, title='1H 50 EMA', color=color.new(C_EMA_1H_50, 20), linewidth=4)
+plot(ema1h200, title='1H 200 EMA', color=color.new(C_EMA_1H_200, 20), linewidth=4)
+plot(ema4h200, title='4H 200 EMA', color=color.new(C_EMA_4H_200, 20), linewidth=4)
+plot(ema1d50, title='50D EMA', color=color.new(C_EMA_1D_50, 20), linewidth=4)
+plot(ema1d200, title='200D EMA', color=color.new(C_EMA_1D_200, 20), linewidth=4)
+plot(ema1w21, title='21W EMA', color=color.new(C_EMA_1W_21, 20), linewidth=4)
+plot(ema1w50, title='50W EMA', color=color.new(C_EMA_1W_50, 20), linewidth=4)
+plot(ma200w, title='200W EMA', color=color.new(C_MA_200W, 20), linewidth=4)
+
+ema1h50Upper = ema1h50 + (atr * atrMulti)
+ema1h50Lower = ema1h50 - (atr * atrMulti)
+p1ema1h50 = plot(ema1h50Upper, "Upper", color=color.new(C_EMA_1H_50, showBands ? 50 : 100))
+p2ema1h50 = plot(ema1h50Lower, "Lower", color=color.new(C_EMA_1H_50, showBands ? 50 : 100))
+fill(p1ema1h50, p2ema1h50, title = "EMA 1H 50 band", color=color.new(C_EMA_1H_50, showBands ? 90 : 100))
+
+ema1h200Upper = ema1h200 + (atr * atrMulti)
+ema1h200Lower = ema1h200 - (atr * atrMulti)
+p1ema1h200 = plot(ema1h200Upper, "Upper", color=color.new(C_EMA_1H_200, showBands ? 50 : 100))
+p2ema1h200 = plot(ema1h200Lower, "Lower", color=color.new(C_EMA_1H_200, showBands ? 50 : 100))
+fill(p1ema1h200, p2ema1h200, title = "EMA 1H 200 band", color=color.new(C_EMA_1H_200, showBands ? 90 : 100))

@@ -1,0 +1,16 @@
+//@version=5
+indicator(title='ATR levels', shorttitle='ATR levels', overlay=true, timeframe='', timeframe_gaps=true)
+
+lookback = input.int(title="Lookback", defval=20)
+atrLength = input.int(title="ATR Length", defval = 14)
+atrMulti = input.float(title="ATR multiplier", defval = 10)
+emaLength = input.int(title="EMA Length", defval = 5)
+
+swingLow = ta.lowest(close, lookback)
+swingHigh = ta.highest(close, lookback)
+
+atrLower = swingLow - (atrLength * atrMulti)
+atrUpper = swingHigh + (atrLength * atrMulti)
+
+p2 = plot(atrUpper, color=color.new(color.teal, 20), linewidth=2)
+p5 = plot(atrLower, color=color.new(color.red, 20), linewidth=2)

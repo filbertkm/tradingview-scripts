@@ -1,0 +1,51 @@
+// @version=5
+// TSV
+indicator(title="TSV TSI")
+
+var g_tsv = "TSV"
+l = input(22, title='TSV Length', group=g_tsv)
+l_ma = input(55, title='MA Length', group=g_tsv)
+l_ma_short = input(7, title='MA Length', group=g_tsv)
+
+f_top(osc) =>
+    top = false
+    top := math.avg(osc[4], osc[3]) < osc[2] and math.avg(osc, osc[1]) < osc[2] and osc[2] > 0 and top[1] == false
+    top
+
+f_bottom(osc) =>
+    bottom = false
+    bottom := math.avg(osc[4], osc[3]) > osc[2] and math.avg(osc, osc[1]) > osc[2] and osc[2] < 0 and bottom[1] == false
+    bottom
+
+f_sell(osc, top) =>
+    sell = false
+    sell := top == true and osc[2] < ta.valuewhen(top == true, osc[2], 1) and close[2] > ta.valuewhen(top == true, close[2], 1)
+    sell
+
+f_buy(osc, bottom) =>
+    buy = false
+    buy := bottom == true and osc[2] > ta.valuewhen(bottom == true, osc[2], 1) and close[2] < ta.valuewhen(bottom == true, close[2], 1)
+    buy
+
+
+t = math.sum(close > close[1] ? volume * (close - close[1]) : close < close[1] ? volume * (close - close[1]) : 0, l)
+tsv = ta.ema(t, l_ma)
+tsvShort = ta.ema(t, l_ma_short)
+
+tsvTsi = ta.tsi(t, l_ma_short, l_ma)
+
+top = f_top(tsvTsi)
+bottom = f_bottom(tsvTsi)
+
+buy = f_buy(tsvTsi, top)
+sell = f_sell(tsvTsi, bottom)
+
+// PLOT
+
+plotshape(sell, title="Sell", style=shape.circle, location=location.top, size=size.tiny, color=color.new(color.red, 0), offset=-1)
+plotshape(top and not sell, title="RSI Bottom Pivot", style=shape.xcross, location=location.top, size=size.tiny, color=color.new(color.gray, 0), offset=-1)
+
+plotshape(buy, style=shape.circle, title="Buy", location=location.bottom, size=size.tiny, color=color.new(color.lime, 0), offset=-1)
+plotshape(bottom and not buy, title="RSI Bottom Pivot", style=shape.xcross, location=location.bottom, size=size.tiny, color=color.new(color.gray, 0), offset=-1)
+
+plot(tsvTsi)

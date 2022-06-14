@@ -1,0 +1,77 @@
+//@version=5
+// Copyright (c) 2018-present, Alex Orekhov (everget)
+// Schaff Trend Cycle script may be freely distributed under the MIT license.
+indicator('Schaff Trend Cycle', shorttitle='STC')
+
+fastLength = input(title='MACD Fast Length', defval=23)
+slowLength = input(title='MACD Slow Length', defval=50)
+cycleLength = input(title='Cycle Length', defval=10)
+d1Length = input(title='1st %D Length', defval=3)
+d2Length = input(title='2nd %D Length', defval=3)
+src = input(title='Source', defval=close)
+upper = input(title='Upper Band', defval=75)
+lower = input(title='Lower Band', defval=25)
+highlightBreakouts = input(title='Highlight Breakouts ?', defval=true)
+
+
+f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length) =>
+    macd = ta.ema(src, fastLength) - ta.ema(src, slowLength)
+    k = nz(fixnan(ta.stoch(macd, macd, macd, cycleLength)))
+    d = ta.ema(k, d1Length)
+    kd = nz(fixnan(ta.stoch(d, d, d, cycleLength)))
+    stc = ta.ema(kd, d2Length)
+    stc := math.max(math.min(stc, 100), 0)
+
+stc = f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length)
+
+stc12m = request.security(syminfo.tickerid, '12', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc24m = request.security(syminfo.tickerid, '24', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc45m = request.security(syminfo.tickerid, '45', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc2h = request.security(syminfo.tickerid, '120', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc3h = request.security(syminfo.tickerid, '180', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc4h = request.security(syminfo.tickerid, '240', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc6h = request.security(syminfo.tickerid, '360', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc12h = request.security(syminfo.tickerid, '720', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc1d = request.security(syminfo.tickerid, 'D', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc2d = request.security(syminfo.tickerid, '2D', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc3d = request.security(syminfo.tickerid, '3D', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc5d = request.security(syminfo.tickerid, '5D', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc1w = request.security(syminfo.tickerid, '1W', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stc2w = request.security(syminfo.tickerid, '2W', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+stcM = request.security(syminfo.tickerid, '1M', f_stc(src, fastLength, slowLength, cycleLength, d1Length, d2Length))
+
+stcColor1 = stc > stc[1] ? color.red : color.green
+stcColor2 = stc > upper ? color.red : stc <= lower ? color.green : color.orange
+
+stcColor = highlightBreakouts ? stcColor2 : stcColor1
+stcPlot = plot(stc, title='STC', color=stcColor)
+
+upperLevel = plot(upper, title='Upper', color=color.new(color.gray, 0))
+hline(50, title='Middle', linestyle=hline.style_dotted)
+lowerLevel = plot(lower, title='Lower', color=color.new(color.gray, 0))
+
+
+fill(upperLevel, lowerLevel, title='Middle Zone', color=color.new(#f9cb9c, 90))
+
+upperFillColor = stc > upper and highlightBreakouts ? color.new(color.red, 80) : na
+lowerFillColor = stc < lower and highlightBreakouts ? color.new(color.green, 80) : na
+
+fill(upperLevel, stcPlot, color=upperFillColor)
+fill(lowerLevel, stcPlot, color=lowerFillColor)
+
+buySignal = ta.crossover(stc, lower)
+sellSignal = ta.crossunder(stc, upper)
+upperCrossover = ta.crossover(stc, upper)
+upperCrossunder = ta.crossunder(stc, upper)
+lowerCrossover = ta.crossover(stc, lower)
+lowerCrossunder = ta.crossunder(stc, lower)
+
+plotshape(upperCrossunder ? upper : na, title='Sell Signal', location=location.absolute, style=shape.circle, size=size.tiny, color=color.new(color.red, 0))
+plotshape(lowerCrossover ? lower : na, title='Buy Signal', location=location.absolute, style=shape.circle, size=size.tiny, color=color.new(color.green, 0))
+
+alertcondition(buySignal, title='Alert: Buy', message='STC: Buy!\nSymbol: {{exchange}}:{{ticker}}\nPrice: {{close}}')
+alertcondition(sellSignal, title='Alert: Sell', message='STC: Sell!\nSymbol: {{exchange}}:{{ticker}}\nPrice: {{close}}')
+alertcondition(upperCrossover, title='Alert: Upper Band Crossover', message='STC: Upper Band Crossover!\nSymbol: {{exchange}}:{{ticker}}\nPrice: {{close}}')
+alertcondition(upperCrossunder, title='Alert: Upper Band Crossunder', message='STC: Upper Band Crossunder!\nSymbol: {{exchange}}:{{ticker}}\nPrice: {{close}}')
+alertcondition(lowerCrossover, title='Alert: Lower Band Crossover', message='STC: Lower Band Crossover!\nSymbol: {{exchange}}:{{ticker}}\nPrice: {{close}}')
+alertcondition(lowerCrossunder, title='Alert: Lower Band Crossunder', message='STC: Lower Band Crossunder!\nSymbol: {{exchange}}:{{ticker}}\nPrice: {{close}}')

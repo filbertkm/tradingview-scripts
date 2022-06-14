@@ -1,0 +1,16 @@
+{
+  "strategy": "WilliamsR Strategy",
+  "ticker": "{{ticker}}",
+  "period": "{{interval}}",
+  "position": "{{strategy.market_position}}",
+  "prev_position": "{{strategy.prev_market_position}}",
+  "stop": {{plot("Stop")}},
+  "tp": {{plot("TP")}},
+  "open": {{open}},
+  "close": {{close}},
+  "high": {{high}},
+  "low": {{low}},
+  "volume": {{volume}},
+  "time": "{{time}}",
+  "token": "TOKEN"
+}

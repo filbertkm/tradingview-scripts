@@ -1,0 +1,511 @@
+// @version=5
+// © kmf164
+indicator(title='Stoch RSI MTF V2', shorttitle='Stoch RSI MTF V2', format=format.price, precision=2, overlay=false)
+
+import kmf164/MultiTimeFrameHelper/2 as mtf
+
+rsiLength = input.int(14, 'RSI Length', minval=1)
+rsiOversold = input.int(10, 'RSI Oversold', minval=1)
+rsiOverbought = input.int(90, 'RSI Overbought', minval=1)
+
+// todo
+// rsi value
+// bull / bearish
+// oversold / overbought
+// rsi rising / falling
+// rsi pivot
+// rsi divergence
+// rsi ema - cross
+// rsi above / below ema
+// rsi ema - rising / falling
+// rsi ema - bull / bear
+
+// MTF helper functions
+// xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+f_getTfMin(tfIdx) =>
+    int nextTf = na
+    tfCount = 0
+
+    if timeframe.isminutes or timeframe.isseconds
+        if (timeframe.isseconds or timeframe.multiplier < 3)
+            nextTf := 3
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 15) and tfCount < tfIdx
+            nextTf := 15
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 45) and tfCount < tfIdx
+            nextTf := 45
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 120) and tfCount < tfIdx
+            nextTf := 120
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 240) and tfCount < tfIdx
+            nextTf := 240
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 480) and tfCount < tfIdx
+            nextTf := 480
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 720) and tfCount < tfIdx
+            nextTf := 720
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 960) and tfCount < tfIdx
+            nextTf := 960
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 1440) and tfCount < tfIdx
+            nextTf := 1440
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 1440 * 2) and tfCount < tfIdx
+            nextTf := 1440 * 2
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 1440 * 3) and tfCount < tfIdx
+            nextTf := 1440 * 3
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 1440 * 5) and tfCount < tfIdx
+            nextTf := 1440 * 5
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 1440 * 7) and tfCount < tfIdx
+            nextTf := 1440 * 7
+            tfCount := tfCount + 1
+        if (timeframe.isseconds or timeframe.multiplier < 1440 * 14) and tfCount < tfIdx
+            nextTf := 1440 * 14
+            tfCount := tfCount + 1
+
+    if timeframe.isdaily
+        if timeframe.multiplier < 2 and tfCount < tfIdx
+            nextTf := 1440 * 2
+            tfCount := tfCount + 1
+        if timeframe.multiplier < 2 and tfCount < tfIdx
+            nextTf := 1440 * 3
+            tfCount := tfCount + 1
+        if timeframe.multiplier < 5 and tfCount < tfIdx
+            nextTf := 1440 * 5
+            tfCount := tfCount + 1
+        if timeframe.multiplier < 7 and tfCount < tfIdx
+            nextTf := 1440 * 7
+            tfCount := tfCount + 1
+        if timeframe.multiplier < 14 and tfCount < tfIdx
+            nextTf := 1440 * 14
+            tfCount := tfCount + 1
+
+    if timeframe.isweekly
+        if timeframe.multiplier < 2 and tfCount < tfIdx
+            nextTf := 1440 * 14
+            tfCount := tfCount + 1
+
+    nextTf
+
+f_getPrefTfIndex(tfIdx) =>
+    prevTf = f_getTfMin(tfIdx - 1)
+    prevTf
+
+f_getTfIndex(tfIdx) =>
+    nextTf = f_getTfMin(tfIdx)
+    prevTf = tfIdx > 1 ? f_getPrefTfIndex(tfIdx) : na
+
+    if not na(prevTf) and nextTf == prevTf
+        nextTf := na
+
+    nextTf
+
+f_tfToString(tfMin) =>
+    string tfString = na
+    if not na(tfMin)
+        tfString := str.tostring(tfMin)
+
+        if tfMin == 2880
+            tfString := "2D"
+        else if tfMin == 1440 * 3
+            tfString := "3D"
+        else if tfMin == 1440 * 5
+            tfString := "5D"
+        else if tfMin == 1440 * 7
+            tfString := "1W"
+        else if tfMin == 1440 * 14
+            tfString := "2W"
+
+    tfString
+
+f_getScoreOffset(tf1) =>
+    scoreOffset = 0
+    if tf1 == 15
+        scoreOffset := 1
+    else if tf1 == 45
+        scoreOffset := 2
+    else if tf1 == 120
+        scoreOffset := 3
+    else if tf1 == 240
+        scoreOffset := 4
+    else if tf1 == 480
+        scoreOffset := 5
+    else if tf1 == 720
+        scoreOffset := 6
+    else if tf1 == 960
+        scoreOffset := 7
+    else if tf1 == 1440
+        scoreOffset := 8
+    else if tf1 == 1440 * 2
+        scoreOffset := 9
+    else if tf1 == 1440 * 3
+        scoreOffset := 10
+    else if tf1 == 1440 * 5
+        scoreOffset := 11
+    else if tf1 == 1440 * 7
+        scoreOffset := 12
+    else if tf1 == 1440 * 14
+        scoreOffset := 13
+
+    scoreOffset
+
+f_getMaxTfIntGte(
+     gteVal,
+     tfScore,
+     int tf1Score = na,
+     int tf2Score = na,
+     int tf3Score = na,
+     int tf4Score = na,
+     int tf5Score = na,
+     int tf6Score = na,
+     int tf7Score = na,
+     int tf8Score = na,
+     int tf9Score = na,
+     int tf10Score = na,
+     int tf11Score = na,
+     int tf12Score = na,
+     int tf13Score = na,
+     int tf14Score = na
+     ) =>
+    maxTf = 0
+
+    if tfScore >= gteVal
+        maxTf := 1
+        if not na(tf1Score) and tf1Score >= gteVal
+            maxTf := 2
+            if not na(tf2Score) and tf2Score >= gteVal
+                maxTf := 3
+                if not na(tf3Score) and tf3Score >= gteVal
+                    maxTf := 4
+                    if not na(tf4Score) and tf4Score >= gteVal
+                        maxTf := 5
+                        if not na(tf5Score) and tf5Score >= gteVal
+                            maxTf := 6
+
+    if maxTf == 6
+        if not na(tf6Score) and tf6Score >= gteVal
+            maxTf := 7
+            if not na(tf7Score) and tf7Score >= gteVal
+                maxTf := 8
+                if not na(tf8Score) and tf8Score >= gteVal
+                    maxTf := 9
+                    if not na(tf9Score) and tf9Score >= gteVal
+                        maxTf := 10
+                        if not na(tf10Score) and tf10Score >= gteVal
+                            maxTf := 11
+
+    if maxTf == 11
+        if not na(tf11Score) and tf12Score >= gteVal
+            maxTf := 12
+            if not na(tf12Score) and tf12Score >= gteVal
+                maxTf := 13
+                if not na(tf13Score) and tf13Score >= gteVal
+                    maxTf := 14
+                    if not na(tf14Score) and tf14Score >= gteVal
+                        maxTf := 15
+
+    maxTf
+
+f_getMaxTfIntLte(
+     lteVal,
+     tfScore,
+     int tf1Score = na,
+     int tf2Score = na,
+     int tf3Score = na,
+     int tf4Score = na,
+     int tf5Score = na,
+     int tf6Score = na,
+     int tf7Score = na,
+     int tf8Score = na,
+     int tf9Score = na,
+     int tf10Score = na,
+     int tf11Score = na,
+     int tf12Score = na,
+     int tf13Score = na,
+     int tf14Score = na
+     ) =>
+    maxTf = 0
+
+    if tfScore <= lteVal
+        maxTf := 1
+        if not na(tf1Score) and tf1Score <= lteVal
+            maxTf := 2
+            if not na(tf2Score) and tf2Score <= lteVal
+                maxTf := 3
+                if not na(tf3Score) and tf3Score <= lteVal
+                    maxTf := 4
+                    if not na(tf4Score) and tf4Score <= lteVal
+                        maxTf := 5
+                        if not na(tf5Score) and tf5Score <= lteVal
+                            maxTf := 6
+
+    if maxTf == 6
+        if not na(tf6Score) and tf6Score <= lteVal
+            maxTf := 7
+            if not na(tf7Score) and tf7Score <= lteVal
+                maxTf := 8
+                if not na(tf8Score) and tf8Score <= lteVal
+                    maxTf := 9
+                    if not na(tf9Score) and tf9Score <= lteVal
+                        maxTf := 10
+                        if not na(tf10Score) and tf10Score <= lteVal
+                            maxTf := 11
+
+    if maxTf == 11
+        if not na(tf11Score) and tf12Score <= lteVal
+            maxTf := 12
+            if not na(tf12Score) and tf12Score <= lteVal
+                maxTf := 13
+                if not na(tf13Score) and tf13Score <= lteVal
+                    maxTf := 14
+                    if not na(tf14Score) and tf14Score <= lteVal
+                        maxTf := 15
+
+    maxTf
+
+// -- MTF helper functions
+// xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+f_rsiMA(src) =>
+    ma20 = ta.sma(src, 20)
+    rsiMA20 = ta.rsi(ma20, 13)
+    rsiMA20
+
+f_stochrsi(src, lengthRSI) =>
+    rsi = ta.rsi(src, lengthRSI)
+    k = ta.sma(ta.stoch(rsi, rsi, rsi, lengthRSI), 3)
+    d = ta.sma(k, 3)
+    [k, d]
+
+f_bullBearScore(src, lengthRSI, oversold, overbought) =>
+    [k, d] = f_stochrsi(src, lengthRSI)
+
+    bullBearScore = if d >= 50
+        if d > overbought
+            3
+        else if d > 60
+            2
+        else
+            1
+    else if d < oversold
+        -3
+    else if d < 40
+        -2
+    else
+        -1
+    bullBearScore
+
+tf1 = f_getTfIndex(1)
+tf2 = f_getTfIndex(2)
+tf3 = f_getTfIndex(3)
+tf4 = f_getTfIndex(4)
+tf5 = f_getTfIndex(5)
+tf6 = f_getTfIndex(6)
+tf7 = f_getTfIndex(7)
+tf8 = f_getTfIndex(8)
+tf9 = f_getTfIndex(9)
+tf10 = f_getTfIndex(10)
+tf11 = f_getTfIndex(11)
+tf12 = f_getTfIndex(12)
+tf13 = f_getTfIndex(13)
+tf14 = f_getTfIndex(14)
+
+int tf1a = 45
+
+[k, d] = f_stochrsi(close, rsiLength)
+
+rsiMA20 = f_rsiMA(close)
+
+rsiBullBearScore = f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought)
+rsiBullBearScoreTf1 = na(tf1) ? na : request.security(syminfo.tickerid, f_tfToString(tf1a), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf2 = na(tf2) ? na : request.security(syminfo.tickerid, f_tfToString(tf2), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf3 = na(tf3) ? na :request.security(syminfo.tickerid, f_tfToString(tf3), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf4 = na(tf4) ? na : request.security(syminfo.tickerid, f_tfToString(tf4), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf5 = na(tf5) ? na : request.security(syminfo.tickerid, f_tfToString(tf5), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf6 = na(tf6) ? na : request.security(syminfo.tickerid, f_tfToString(tf6), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf7 = na(tf7) ? na : request.security(syminfo.tickerid, f_tfToString(tf7), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf8 = na(tf8) ? na : request.security(syminfo.tickerid, f_tfToString(tf8), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf9 = na(tf9) ? na : request.security(syminfo.tickerid, f_tfToString(tf9), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf10 = na(tf10) ? na : request.security(syminfo.tickerid, f_tfToString(tf10), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf11 = na(tf11) ? na : request.security(syminfo.tickerid, f_tfToString(tf11), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf12 = na(tf12) ? na : request.security(syminfo.tickerid, f_tfToString(tf12), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf13 = na(tf13) ? na : request.security(syminfo.tickerid, f_tfToString(tf13), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+rsiBullBearScoreTf14 = na(tf14) ? na : request.security(syminfo.tickerid, f_tfToString(tf14), f_bullBearScore(close, rsiLength, rsiOversold, rsiOverbought))
+
+scoreOffset = f_getScoreOffset(tf1)
+
+bearMaxTf = f_getMaxTfIntGte(
+     2,
+     rsiBullBearScore,
+     rsiBullBearScoreTf1,
+     rsiBullBearScoreTf2,
+     rsiBullBearScoreTf3,
+     rsiBullBearScoreTf4,
+     rsiBullBearScoreTf5,
+     rsiBullBearScoreTf6,
+     rsiBullBearScoreTf7,
+     rsiBullBearScoreTf8,
+     rsiBullBearScoreTf9,
+     rsiBullBearScoreTf10,
+     rsiBullBearScoreTf11,
+     rsiBullBearScoreTf12,
+     rsiBullBearScoreTf13,
+     rsiBullBearScoreTf14
+     )
+obMaxTf = f_getMaxTfIntGte(
+     3,
+     rsiBullBearScore,
+     rsiBullBearScoreTf1,
+     rsiBullBearScoreTf2,
+     rsiBullBearScoreTf3,
+     rsiBullBearScoreTf4,
+     rsiBullBearScoreTf5,
+     rsiBullBearScoreTf6,
+     rsiBullBearScoreTf7,
+     rsiBullBearScoreTf8,
+     rsiBullBearScoreTf9,
+     rsiBullBearScoreTf10,
+     rsiBullBearScoreTf11,
+     rsiBullBearScoreTf12,
+     rsiBullBearScoreTf13,
+     rsiBullBearScoreTf14
+     )
+
+bullMaxTf = f_getMaxTfIntLte(
+     -2,
+     rsiBullBearScore,
+     rsiBullBearScoreTf1,
+     rsiBullBearScoreTf2,
+     rsiBullBearScoreTf3,
+     rsiBullBearScoreTf4,
+     rsiBullBearScoreTf5,
+     rsiBullBearScoreTf6,
+     rsiBullBearScoreTf7,
+     rsiBullBearScoreTf8,
+     rsiBullBearScoreTf9,
+     rsiBullBearScoreTf10,
+     rsiBullBearScoreTf11,
+     rsiBullBearScoreTf12,
+     rsiBullBearScoreTf13,
+     rsiBullBearScoreTf14
+     )
+
+osMaxTf = f_getMaxTfIntLte(
+     -3,
+     rsiBullBearScore,
+     rsiBullBearScoreTf1,
+     rsiBullBearScoreTf2,
+     rsiBullBearScoreTf3,
+     rsiBullBearScoreTf4,
+     rsiBullBearScoreTf5,
+     rsiBullBearScoreTf6,
+     rsiBullBearScoreTf7,
+     rsiBullBearScoreTf8,
+     rsiBullBearScoreTf9,
+     rsiBullBearScoreTf10,
+     rsiBullBearScoreTf11,
+     rsiBullBearScoreTf12,
+     rsiBullBearScoreTf13,
+     rsiBullBearScoreTf14
+     )
+
+rsiMAIsBullish = rsiMA20 < 10 or (ta.rising(rsiMA20, 1) and rsiMA20 < 90)
+rsiMAIsBearish = rsiMA20 > 90 or (ta.falling(rsiMA20, 1) and rsiMA20 > 10)
+
+bearMaxTf := bearMaxTf > 0 ? bearMaxTf + scoreOffset : bearMaxTf
+obMaxTf := obMaxTf > 0 ? obMaxTf + scoreOffset : obMaxTf
+
+bullMaxTf := bullMaxTf > 0 ? bullMaxTf + scoreOffset : bullMaxTf
+osMaxTf := osMaxTf > 0 ? osMaxTf + scoreOffset : osMaxTf
+
+scorePivotDown = obMaxTf[1] > 3 and obMaxTf[0] < obMaxTf[1] and rsiMAIsBearish
+scorePivotUp = osMaxTf[1] > 3 and osMaxTf[0] < osMaxTf[1] and rsiMAIsBullish
+
+bearPivotDown = not scorePivotDown and bearMaxTf[1] >= 5 and bearMaxTf[0] < bearMaxTf[1] and rsiMAIsBearish
+bullPivotUp = not scorePivotUp and bullMaxTf[1] >= 5 and bullMaxTf[0] < bullMaxTf[1] and rsiMAIsBullish
+
+stochXDown90 = ta.crossunder(d, 90) and bearMaxTf[1] >= 5 and (rsiMA20 > 70 or ta.falling(rsiMA20, 1))
+stochXUp10 = ta.crossover(d, 10) and bullMaxTf[1] >= 5 and(rsiMA20 < 30 or ta.rising(rsiMA20, 1))
+
+rsiPivotHigh = ta.falling(d, 1) and not ta.falling(d, 2) and obMaxTf > 5 and rsiMAIsBearish
+rsiPivotLow = ta.rising(d, 1) and not ta.rising(d, 2) and osMaxTf > 5
+
+color bgColor = na
+int bgTransp = 100
+
+if osMaxTf > 2
+    bgTransp := 100 - ((osMaxTf * 10) / 2)
+    bgColor := color.new(color.green, bgTransp)
+else if bullMaxTf > 2
+    bgTransp := 100 - ((bullMaxTf * 10) / 4)
+    bgColor := color.new(color.teal, bgTransp)
+else if obMaxTf > 2
+    bgTransp := 100 - ((obMaxTf * 10) / 2)
+    bgColor := color.new(color.red, bgTransp)
+else if bearMaxTf > 2
+    bgTransp := 100 - ((bearMaxTf * 10) / 4)
+    bgColor := color.new(color.maroon, bgTransp)
+
+p1 = plot(100, "Upper", color=color.new(color.white, 95))
+p2 = plot(0, "Lower", color=color.new(color.white, 95))
+fill(p1, p2, title = "Background", color=bgColor)
+
+color colorBlack = color.new(color.black, 99)
+
+rsiColor = ta.rising(d, 1) ? color.new(color.green, 20) : color.new(color.red, 20)
+
+plot(d, "RSI", color=rsiColor, linewidth=3)
+
+plot(scoreOffset, "offset", color=colorBlack, linewidth=1)
+plot(rsiBullBearScore, "scoretf0", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf1, "scoretf1", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf2, "scoretf2", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf3, "scoretf3", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf4, "scoretf4", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf5, "scoretf5", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf6, "scoretf6", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf7, "scoretf7", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf8, "scoretf8", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf9, "scoretf9", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf10, "scoretf10", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf11, "scoretf11", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf12, "scoretf12", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf13, "scoretf13", color=colorBlack, linewidth=1)
+plot(rsiBullBearScoreTf14, "scoretf14", color=colorBlack, linewidth=1)
+
+plot(osMaxTf, "osmax", color=colorBlack, linewidth=1)
+plot(bearMaxTf, "bearmax", color=colorBlack, linewidth=1)
+plot(obMaxTf, "obmax", color=colorBlack, linewidth=1)
+plot(bullMaxTf, "bullmax", color=colorBlack, linewidth=1)
+
+plotshape(
+     scorePivotUp ? -5 : na,
+     title='Score Pivot Up',
+     style=shape.triangleup,
+     color=color.new(color.green, 40),
+     location=location.absolute,
+     size=size.tiny
+     )
+
+plotshape(
+     scorePivotDown ? 105 : na,
+     title='Score Pivot Down',
+     style=shape.triangledown,
+     color=color.new(color.red, 40),
+     location=location.absolute,
+     size=size.tiny
+     )
+
+alertcondition(scorePivotUp, 'RSI [LONG]', 'RSI [LONG]')
+alertcondition(scorePivotDown, 'RSI [SHORT]', 'RSI [SHORT]')
+
+alertcondition(bullPivotUp, 'RSI [LOW]', 'RSI [LOW]')
+alertcondition(bearPivotDown, 'RSI [HIGH]', 'RSI [HIGH]')

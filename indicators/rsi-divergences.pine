@@ -1,0 +1,279 @@
+//@version=5
+// based on script by Charles Edwards, 2019
+indicator('RSI Divergence Tops + Bottoms')
+
+rsiLength = input.int(title="RSI Period", minval=1, defval=7)
+rsiSmaLength = input.int(5, "RSI SMA Length")
+
+smaLength = input.int(5, "Money Flow SMA Length")
+
+atrLength = input.int(title="ATR Length", defval = 14)
+atrMulti = input.float(title="ATR multiplier", defval = 1.0)
+
+filterMF = input.bool(true, title = "Filter Money Flow")
+
+plot_bands = input(true, 'Plot Overbought / Oversold Bands?')
+
+plot_troughs = input(true, 'Plot Potential RSI troughs?')
+plot_peaks = input(true, 'Plot Potential RSI peaks?')
+
+plot_troughs_d = input(true, 'Plot RSI Troughs Divergence?')
+plot_peaks_d = input(true, 'Plot RSI Peak Divergence?')
+
+// MFI
+_mfi_rsi(mfi_upper, mfi_lower) =>
+    if mfi_lower == 0
+        100
+    if mfi_upper == 0
+        0
+    100.0 - 100.0 / (1.0 + mfi_upper / mfi_lower)
+
+f_mfi(_src, _vol) =>
+    mfi_upper = math.sum(volume * (ta.change(hlc3) <= 0 ? 0 : hlc3), 58)
+    mfi_lower = math.sum(volume * (ta.change(hlc3) >= 0 ? 0 : hlc3), 58)
+    mf = _mfi_rsi(mfi_upper, mfi_lower)
+    mfi = (mf - 50) * 3
+    mfi
+
+f_rsi(_src, _len) =>
+    change = ta.change(_src)
+    gain = change >= 0 ? change : 0.0
+    loss = change < 0 ? -1 * change : 0.0
+    avgGain = ta.rma(gain, _len)
+    avgLoss = ta.rma(loss, _len)
+    rs = avgGain / avgLoss
+    rsi = 100 - 100 / (1 + rs)
+    rsi
+
+f_top(rsi) =>
+    top = false
+    top := math.avg(rsi[4], rsi[3]) < rsi[2] and math.avg(rsi, rsi[1]) < rsi[2] and rsi[2] > 60 and top[1] == false
+    top
+
+f_bottom(rsi) =>
+    bottom = false
+    bottom := math.avg(rsi[4], rsi[3]) > rsi[2] and math.avg(rsi, rsi[1]) > rsi[2] and rsi[2] < 40 and bottom[1] == false
+    bottom
+
+f_sell(rsi, top) =>
+    sell = false
+    sell := top == true and rsi[2] < ta.valuewhen(top == true, rsi[2], 1) and close[2] > ta.valuewhen(top == true, close[2], 1)
+    sell
+
+f_buy(rsi, bottom) =>
+    buy = false
+    buy := bottom == true and rsi[2] > ta.valuewhen(bottom == true, rsi[2], 1) and close[2] < ta.valuewhen(bottom == true, close[2], 1)
+    buy
+
+[ema1h13, ema1h50, ema1h200] = request.security(syminfo.tickerid, '60', [ta.ema(close, 13), ta.ema(close, 50), ta.ema(close, 200)])
+
+mfi = f_mfi(hlc3, volume)
+mfiSma = ta.sma(mfi, smaLength)
+
+mfi12m = request.security(syminfo.tickerid, "12", f_mfi(hlc3, volume))
+mfiSma12m = ta.sma(mfi12m, smaLength)
+
+mfi45m = request.security(syminfo.tickerid, "45", f_mfi(hlc3, volume))
+mfiSma45m = ta.sma(mfi45m, smaLength)
+
+mfi3h = request.security(syminfo.tickerid, "180", f_mfi(hlc3, volume))
+mfiSma3h = ta.sma(mfi3h, smaLength)
+
+rsi = f_rsi(close, rsiLength)
+
+rsi15m = request.security(syminfo.tickerid, "15", f_rsi(close, rsiLength))
+rsi30m = request.security(syminfo.tickerid, "30", f_rsi(close, rsiLength))
+rsi1h = request.security(syminfo.tickerid, "60", f_rsi(close, rsiLength))
+rsi2h = request.security(syminfo.tickerid, "120", f_rsi(close, rsiLength))
+rsi3h = request.security(syminfo.tickerid, "180", f_rsi(close, rsiLength))
+rsi4h = request.security(syminfo.tickerid, "240", f_rsi(close, rsiLength))
+rsi6h = request.security(syminfo.tickerid, "360", f_rsi(close, rsiLength))
+rsi8h = request.security(syminfo.tickerid, "480", f_rsi(close, rsiLength))
+rsi10h = request.security(syminfo.tickerid, "600", f_rsi(close, rsiLength))
+rsi12h = request.security(syminfo.tickerid, "720", f_rsi(close, rsiLength))
+rsi16h = request.security(syminfo.tickerid, "960", f_rsi(close, rsiLength))
+rsi20h = request.security(syminfo.tickerid, "1200", f_rsi(close, rsiLength))
+rsi1d = request.security(syminfo.tickerid, "1D", f_rsi(close, rsiLength))
+
+plot(rsi, title="RSI", color=color.new(color.white, 0), linewidth=3)
+
+over_sold = plot(plot_bands ? 30.0 : na, title="Oversold", color=color.new(color.green, 0), linewidth=1)
+mediam = plot(plot_bands ? 50.0 : na, title="Median", color=color.new(color.gray, 30), linewidth=1, style=plot.style_linebr)
+over_bought = plot(plot_bands ? 70.0 : na, title="Overbought", color=color.new(color.red, 0), linewidth=1)
+extreme_over_bought = plot(plot_bands ? 90.0 : na, title="Extreme Overbought", color=color.new(color.red, 0), linewidth=1)
+
+min = plot(plot_bands ? 0.0 : na, title="Min", color=color.new(color.green, 0), linewidth=1)  //dashed or dotted
+max = plot(plot_bands ? 100.0 : na, title="Max", color=color.new(color.red, 0), linewidth=1)  //dashed or dotted
+
+isOversold = rsi < 30 and mfiSma < 0
+isOverbought = rsi > 70 and mfiSma > 0
+
+oversoldTrans = isOversold ? 90 : 100
+overboughtTrans = isOverbought ? 95 : 100
+extremeTrans = rsi > 90 ? 80 : 100
+
+oversoldLevel = isOversold ? 1 : 0
+overboughtLevel = isOverbought ? 1 : 0
+
+if timeframe.isminutes
+    if timeframe.multiplier < 12
+        isOversold := isOversold and mfiSma < 0
+        isOverbought := isOverbought and mfiSma > 0
+
+    if timeframe.multiplier < 15
+        isOversold := isOversold and rsi15m < 30
+        isOverbought := isOverbought and rsi15m > 70
+
+        oversoldTrans := isOversold ? 85 : oversoldTrans
+        overboughtTrans := isOverbought ? 85 : overboughtTrans
+
+    if timeframe.multiplier < 30
+        isOversold := isOversold and rsi30m < 30
+        isOverbought := isOverbought and rsi30m > 70
+
+        oversoldTrans := isOversold ? 80 : oversoldTrans
+        overboughtTrans := isOverbought ? 80 : overboughtTrans
+
+    if timeframe.multiplier < 60
+        isOversold := isOversold and rsi1h < 30
+        isOverbought := isOverbought and rsi1h > 70
+
+        oversoldTrans := isOversold ? 75 : oversoldTrans
+        overboughtTrans := isOverbought ? 75 : overboughtTrans
+
+    if timeframe.multiplier < 120
+        isOversold := isOversold and rsi2h < 30
+        isOverbought := isOverbought and rsi2h > 70
+
+        oversoldTrans := isOversold ? 70 : oversoldTrans
+        overboughtTrans := isOverbought ? 70 : overboughtTrans
+
+    if timeframe.multiplier < 180
+        isOversold := isOversold and rsi3h < 30
+        isOverbought := isOverbought and rsi3h > 70
+
+        oversoldTrans := isOversold ? 65 : oversoldTrans
+        overboughtTrans := isOverbought ? 65 : overboughtTrans
+
+    if timeframe.multiplier < 240
+        isOversold := isOversold and rsi4h < 30
+        isOverbought := isOverbought and rsi4h > 70
+
+        oversoldTrans := isOversold ? 60 : oversoldTrans
+        overboughtTrans := isOverbought ? 60 : overboughtTrans
+
+    if timeframe.multiplier < 360
+        isOversold := isOversold and rsi6h < 30
+        isOverbought := isOverbought and rsi6h > 70
+
+        oversoldTrans := isOversold ? 55 : oversoldTrans
+        overboughtTrans := isOverbought ? 5 : overboughtTrans
+
+    if timeframe.multiplier < 480
+        isOversold := isOversold and rsi8h < 30
+        isOverbought := isOverbought and rsi8h > 70
+
+        oversoldTrans := isOversold ? 50 : oversoldTrans
+        overboughtTrans := isOverbought ? 50 : overboughtTrans
+
+    if timeframe.multiplier < 600
+        isOversold := isOversold and rsi10h < 30
+        isOverbought := isOverbought and rsi10h > 70
+
+        oversoldTrans := isOversold ? 45 : oversoldTrans
+        overboughtTrans := isOverbought ? 45 : overboughtTrans
+
+    if timeframe.multiplier < 720
+        isOversold := isOversold and rsi12h < 30
+        isOverbought := isOverbought and rsi12h > 70
+
+        oversoldTrans := isOversold ? 40 : oversoldTrans
+        overboughtTrans := isOverbought ? 40 : overboughtTrans
+
+    if timeframe.multiplier < 960
+        isOversold := isOversold and rsi16h < 30
+        isOverbought := isOverbought and rsi16h > 70
+
+        oversoldTrans := isOversold ? 35 : oversoldTrans
+        overboughtTrans := isOverbought ? 35 : overboughtTrans
+
+    if timeframe.multiplier < 1200
+        isOversold := isOversold and rsi20h < 30
+        isOverbought := isOverbought and rsi20h > 70
+
+        oversoldTrans := isOversold ? 30 : oversoldTrans
+        overboughtTrans := isOverbought ? 30 : overboughtTrans
+
+
+fill(min, over_sold, plot_bands ? color.new(color.green, oversoldTrans) : na, title='RegionFill')
+fill(over_bought, extreme_over_bought, plot_bands ? color.new(color.red, overboughtTrans) : na, title='RegionFill')
+fill(extreme_over_bought, max, plot_bands ? color.new(color.red, extremeTrans) : na, title='RegionFill')
+
+
+// RSI DIVERGENCE LOGIC
+top = f_top(rsi)
+bottom = f_bottom(rsi)
+sell = f_sell(rsi, top)
+buy = f_buy(rsi, bottom)
+
+// FILTERS
+
+// money flow
+
+top := filterMF ? top and (mfi > 0) : top
+bottom := filterMF ? bottom and (mfi < 0) : bottom
+
+sell := filterMF ? sell and (mfi > 0) : sell
+buy := filterMF ? buy and (mfi < 0) : buy
+
+bullishMF = mfi < 0
+bearishMF = mfi > 0
+
+if timeframe.isminutes and timeframe.multiplier < 12
+    top := filterMF ? top and (mfi12m > 0) : top
+    bottom := filterMF ? bottom and (mfi12m < 0) : bottom
+
+    sell := filterMF ? sell and (mfi12m > 0) : sell
+    buy := filterMF ? buy and (mfi12m < 0) : buy
+
+    bullishMF := bullishMF and mfi12m < 0
+    bearishMF := bearishMF and mfi12m > 0
+
+if timeframe.isminutes and timeframe.multiplier < 45
+    top := filterMF ? top and (mfi45m > 0) : top
+    bottom := filterMF ? bottom and (mfi45m < 0) : bottom
+
+    sell := filterMF ? sell and (mfi45m > 0) : sell
+    buy := filterMF ? buy and (mfi45m < 0) : buy
+
+    bullishMF := bullishMF and mfi45m < 0
+    bearishMF := bearishMF and mfi45m > 0
+
+atr = ta.atr(atrLength)
+
+buyAlert = rsi < 30 and ta.rising(rsi, 1) and not ta.rising(rsi, 2) and close < (ema1h50 + (atr * atrMulti))
+sellAlert = rsi > 70 and ta.falling(rsi, 1) and not ta.falling(rsi, 2) and close > (ema1h50 - (atr * atrMulti))
+
+rsiSma = ta.sma(rsi, rsiSmaLength)
+
+plot(rsiSma, title="RSI SMA", color=color.yellow)
+
+// PLOT
+
+plotshape(plot_peaks_d ? sell: na, title="Sell", style=shape.circle, location=location.top, size=size.tiny, color=color.new(color.red, 0), offset=-1)
+plotshape(plot_peaks ? top and not sell : na, title="RSI Bottom Pivot", style=shape.xcross, location=location.top, size=size.tiny, color=color.new(color.gray, 0), offset=-1)
+
+plotshape(plot_peaks_d ? buy : na, style=shape.circle, title="Buy", location=location.bottom, size=size.tiny, color=color.new(color.lime, 0), offset=-1)
+plotshape(plot_troughs ? bottom and not buy : na, title="RSI Bottom Pivot", style=shape.xcross, location=location.bottom, size=size.tiny, color=color.new(color.gray, 0), offset=-1)
+
+plotshape(plot_peaks_d ? buyAlert : na, title="RSI [SHORT]", style=shape.diamond, location=location.bottom, size=size.tiny, color=color.new(color.blue, 0), offset=-1)
+plotshape(plot_troughs ? sellAlert and not buy : na, title="RSI [LONG]", style=shape.diamond, location=location.top, size=size.tiny, color=color.new(color.orange, 0), offset=-1)
+
+alertcondition(sell, 'RSI Divergence [SHORT]', message="{{tickerid}} - RSI Divergence [SHORT]")
+alertcondition(buy, 'RSI Divergence [LONG]', message="{{tickerid}} - RSI Divergence [LONG]")
+
+alertcondition(top, 'RSI Top Pivot', message="{{tickerid}} - RSI [Pivot High]")
+alertcondition(bottom, 'RSI Bottom Pivot', message="{{tickerid}} - RSI [Pivot Low]")
+
+alertcondition(sellAlert, 'RSI [SHORT]', message="{{tickerid}} - RSI [SHORT] - above 70 and 1h 50 ema")
+alertcondition(buyAlert, 'RSI [LONG]', message="{{tickerid}} - RSI [LONG] - below 30 and 1h 50 ema")

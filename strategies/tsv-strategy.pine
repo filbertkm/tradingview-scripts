@@ -1,0 +1,330 @@
+// 2022-06-01
+// @kmf164
+// @version=5
+// good on 30m tf
+strategy("TSV Strategy", overlay=true)
+
+// Get user input
+lookback     = input.int(title="Lookback", defval=20)
+rr           = input.float(title="Risk:Reward", defval=1.0)
+riskPerTrade = input.float(title="Risk Per Trade %", defval=1.0)
+
+atrLength    = input.int(title="ATR Length", defval = 14, group="ATR")
+multiplier   = input.float(title="ATR Multiplier", defval=2.0, step=0.1, group="ATR")
+enableATR    = input.bool(title="Enable ATR", defval=true, group="ATR")
+
+filterEnableLong = input.bool(title="Enable Longs", defval=true)
+filterEnableShort = input.bool(title="Enable Shorts", defval=true)
+
+displayStopLoss = input.bool(title="Display Stop Loss", defval=false)
+displayTakeProfit = input.bool(title="Display Take Profit", defval=false)
+
+var g_filter = 'Filters'
+filterEmaTrend = input.bool(defval=false, title='Filter EMA Trend', group=g_filter)
+filterVolumeOsc = input.bool(defval=true, title='Filter Volume Osc', group=g_filter)
+filterStoch = input.bool(defval=false, title='Filter Stoch', group=g_filter)
+filterSAR = input.bool(defval=false, title='Filter SAR', group=g_filter)
+filterHull = input.bool(defval=false, title='Filter Hull', group=g_filter)
+filterWavetrend = input.bool(defval=true, title='Filter Wavetrend', group=g_filter)
+
+var g_wt = "Wavetrend"
+wtChannelLen = input.int(9, title = 'WT Channel Length', group=g_wt)
+wtAverageLen = input.int(10, title = 'WT Average Length', group=g_wt)
+wtMASource = input.source(hlc3, title = 'WT MA Source', group=g_wt)
+wtMALen = input.int(3, title = 'WT MA Length', group=g_wt)
+obLevel = input.int(53, title = 'WT Overbought Level 1', group=g_wt)
+osLevel = input.int(-53, title = 'WT Oversold Level 1', group=g_wt)
+wtDivOBLevel = input(37, title='WT Bearish Divergence min', group=g_wt)
+wtDivOSLevel = input(-46, title='WT Bullish Divergence min', group=g_wt)
+
+// Divergences
+f_top_fractal(src) =>
+    src[4] < src[2] and src[3] < src[2] and src[2] > src[1] and src[2] > src[0]
+f_bot_fractal(src) =>
+    src[4] > src[2] and src[3] > src[2] and src[2] < src[1] and src[2] < src[0]
+f_fractalize(src) =>
+    f_top_fractal(src) ? 1 : f_bot_fractal(src) ? -1 : 0
+
+f_findDivs(src, topLimit, botLimit, useLimits) =>
+    fractalTop = f_fractalize(src) > 0 and (useLimits ? src[2] >= topLimit : true) ? src[2] : na
+    fractalBot = f_fractalize(src) < 0 and (useLimits ? src[2] <= botLimit : true) ? src[2] : na
+    highPrev = ta.valuewhen(fractalTop, src[2], 0)[2]
+    highPrice = ta.valuewhen(fractalTop, high[2], 0)[2]
+    lowPrev = ta.valuewhen(fractalBot, src[2], 0)[2]
+    lowPrice = ta.valuewhen(fractalBot, low[2], 0)[2]
+    bearSignal = fractalTop and high[2] > highPrice and src[2] < highPrev
+    bullSignal = fractalBot and low[2] < lowPrice and src[2] > lowPrev
+    bearDivHidden = fractalTop and high[2] < highPrice and src[2] > highPrev
+    bullDivHidden = fractalBot and low[2] > lowPrice and src[2] < lowPrev
+    [fractalTop, fractalBot, lowPrev, bearSignal, bullSignal, bearDivHidden, bullDivHidden]
+
+// WaveTrend
+f_wavetrend(src, chlen, avg, malen, tf) =>
+    tfsrc = request.security(syminfo.tickerid, tf, src)
+    esa = ta.ema(tfsrc, chlen)
+    de = ta.ema(math.abs(tfsrc - esa), chlen)
+    ci = (tfsrc - esa) / (0.015 * de)
+    wt1 = ta.ema(ci, avg)
+    wt2 = ta.sma(wt1, malen)
+    wtVwap = wt1 - wt2
+    wtOversold = wt2 <= osLevel
+    wtOverbought = wt2 >= obLevel
+    wtCross = ta.cross(wt1, wt2)
+    wtCrossUp = wt2 - wt1 <= 0
+    wtCrossDown = wt2 - wt1 >= 0
+    wtCrosslast = ta.cross(wt1[2], wt2[2])
+    wtCrossUplast = wt2[2] - wt1[2] <= 0
+    wtCrossDownlast = wt2[2] - wt1[2] >= 0
+    [wt1, wt2, wtOversold, wtOverbought, wtCross, wtCrossUp, wtCrossDown, wtCrosslast, wtCrossUplast, wtCrossDownlast, wtVwap]
+
+// Calculates WaveTrend
+[wt1, wt2, wtOversold, wtOverbought, wtCross, wtCrossUp, wtCrossDown, wtCross_last, wtCrossUp_last, wtCrossDown_last, wtVwap] = f_wavetrend(wtMASource, wtChannelLen, wtAverageLen, wtMALen, timeframe.period)
+
+[wtFractalTop, wtFractalBot, wtLow_prev, wtBearDiv, wtBullDiv, wtBearDivHidden, wtBullDivHidden] = f_findDivs(wt2, wtDivOBLevel, wtDivOSLevel, true)
+
+
+// ema
+
+trendEmaLen = input.int(66, 'Trend EMA Length')
+
+trendEma = ta.ema(close, trendEmaLen)
+
+// Parabolic SAR
+
+var g_sar = 'Parabolic SAR'
+start = input(0.02, group=g_sar)
+increment = input(0.02, group=g_sar)
+maximum = input(0.2, "Max Value", group=g_sar)
+
+out = ta.sar(start, increment, maximum)
+
+//INPUT
+g_hullsuite = 'Hull Suite'
+src = input(open, title='Source', group=g_hullsuite)
+modeSwitch = input.string('Hma', title='Hull Variation', options=['Hma', 'Thma', 'Ehma'], group=g_hullsuite)
+length = input(36, title='Length(180-200 for floating S/R , 55 for swing entry)', group=g_hullsuite)
+lengthMult = input(1.0, title='Length multiplier (Used to view higher timeframes with straight band)', group=g_hullsuite)
+
+useHtf = input(false, title='Show Hull MA from X timeframe? (good for scalping)', group=g_hullsuite)
+htf = input.timeframe('240', title='Higher timeframe', group=g_hullsuite)
+
+// HULL SUITE
+
+//FUNCTIONS
+//HMA
+HMA(_src, _length) =>
+    ta.wma(2 * ta.wma(_src, _length / 2) - ta.wma(_src, _length), math.round(math.sqrt(_length)))
+//EHMA
+EHMA(_src, _length) =>
+    ta.ema(2 * ta.ema(_src, _length / 2) - ta.ema(_src, _length), math.round(math.sqrt(_length)))
+//THMA
+THMA(_src, _length) =>
+    ta.wma(ta.wma(_src, _length / 3) * 3 - ta.wma(_src, _length / 2) - ta.wma(_src, _length), _length)
+
+//SWITCH
+Mode(modeSwitch, src, len) =>
+    modeSwitch == 'Hma' ? HMA(src, len) : modeSwitch == 'Ehma' ? EHMA(src, len) : modeSwitch == 'Thma' ? THMA(src, len / 2) : na
+
+//OUT
+_hull = Mode(modeSwitch, src, int(length * lengthMult))
+HULL = useHtf ? request.security(syminfo.ticker, htf, _hull) : _hull
+MHULL = HULL[0]
+SHULL = HULL[2]
+
+hullBullish = MHULL > SHULL
+hullBearish = MHULL < SHULL
+
+// STC
+//[SHK] STC colored indicator
+//https://www.tradingview.com/u/shayankm/
+
+var group_stc='STC'
+EEEEEE = input(12, 'Length', group=group_stc)
+BBBB = input(26, 'FastLength', group=group_stc)
+BBBBB = input(50, 'SlowLength', group=group_stc)
+stcMinShort = input.int(80, 'Min Short', group=group_stc)
+stcMaxLong = input.int(50, 'Max Long', group=group_stc)
+
+AAAA(BBB, BBBB, BBBBB) =>
+    fastMA = ta.ema(BBB, BBBB)
+    slowMA = ta.ema(BBB, BBBBB)
+    AAAA = fastMA - slowMA
+    AAAA
+
+AAAAA(EEEEEE, BBBB, BBBBB) =>
+    AAA = input(0.5)
+    var CCCCC = 0.0
+    var DDD = 0.0
+    var DDDDDD = 0.0
+    var EEEEE = 0.0
+    BBBBBB = AAAA(close, BBBB, BBBBB)
+    CCC = ta.lowest(BBBBBB, EEEEEE)
+    CCCC = ta.highest(BBBBBB, EEEEEE) - CCC
+    CCCCC := CCCC > 0 ? (BBBBBB - CCC) / CCCC * 100 : nz(CCCCC[1])
+    DDD := na(DDD[1]) ? CCCCC : DDD[1] + AAA * (CCCCC - DDD[1])
+    DDDD = ta.lowest(DDD, EEEEEE)
+    DDDDD = ta.highest(DDD, EEEEEE) - DDDD
+    DDDDDD := DDDDD > 0 ? (DDD - DDDD) / DDDDD * 100 : nz(DDDDDD[1])
+    EEEEE := na(EEEEE[1]) ? DDDDDD : EEEEE[1] + AAA * (DDDDDD - EEEEE[1])
+    EEEEE
+
+mAAAAA = AAAAA(EEEEEE, BBBB, BBBBB)
+mColor = mAAAAA > mAAAAA[1] ? color.new(color.green, 20) : color.new(color.red, 20)
+
+stcBearish = mAAAAA[3] <= mAAAAA[2] and mAAAAA[2] > mAAAAA[1] and mAAAAA > stcMinShort
+stcBullish = mAAAAA[3] >= mAAAAA[2] and mAAAAA[2] < mAAAAA[1] and mAAAAA < stcMaxLong
+
+stcBuyCond = stcBullish and not stcBullish[1]
+stcSellCond = stcBearish and not stcBearish[1]
+
+// Stoch
+
+var g_stoch = "Stochastic RSI"
+stochLen = input(80, title='Stoch RSI Len', group=g_stoch)
+stochLongMax = input(50, title='Stoch Long Max', group=g_stoch)
+stochShortMin = input(50, title='Stoch Short Min', group=g_stoch)
+
+f_stochrsi(src, lengthRSI) =>
+    rsi = ta.rsi(src, lengthRSI)
+    k = ta.sma(ta.stoch(rsi, rsi, rsi, lengthRSI), 3)
+    d = ta.sma(k, 3)
+    [k, d]
+
+[k, d] = f_stochrsi(close, stochLen)
+
+// TSV
+
+var g_tsv = "TSV"
+l = input(22, title='TSV Length', group=g_tsv)
+l_ma = input(55, title='MA Length', group=g_tsv)
+l_ma_short = input(7, title='MA Length', group=g_tsv)
+
+f_top(osc) =>
+    top = false
+    top := math.avg(osc[4], osc[3]) < osc[2] and math.avg(osc, osc[1]) < osc[2] and osc[2] > 0 and top[1] == false
+    top
+
+f_bottom(osc) =>
+    bottom = false
+    bottom := math.avg(osc[4], osc[3]) > osc[2] and math.avg(osc, osc[1]) > osc[2] and osc[2] < 0 and bottom[1] == false
+    bottom
+
+f_sell(osc, top) =>
+    sell = false
+    sell := top == true and osc[2] < ta.valuewhen(top == true, osc[2], 1) and close[2] > ta.valuewhen(top == true, close[2], 1)
+    sell
+
+f_buy(osc, bottom) =>
+    buy = false
+    buy := bottom == true and osc[2] > ta.valuewhen(bottom == true, osc[2], 1) and close[2] < ta.valuewhen(bottom == true, close[2], 1)
+    buy
+
+
+t = math.sum(close > close[1] ? volume * (close - close[1]) : close < close[1] ? volume * (close - close[1]) : 0, l)
+tsv = ta.ema(t, l_ma)
+tsvShort = ta.ema(t, l_ma_short)
+
+tsvTsi = ta.tsi(t, l_ma_short, l_ma)
+
+top = f_top(tsvTsi)
+bottom = f_bottom(tsvTsi)
+
+buy = f_buy(tsvTsi, top)
+sell = f_sell(tsvTsi, bottom)
+
+// Volume Oscillator
+
+var g_volumeosc = "Volume Oscillator"
+shortlen = input.int(5, minval=1, title = "Short Length", group=g_volumeosc)
+longlen = input.int(9, minval=1, title = "Long Length", group=g_volumeosc)
+vosc_min = input.int(0, title = "Min Volume Level", group=g_volumeosc)
+
+var cumVol = 0.
+cumVol += nz(volume)
+if barstate.islast and cumVol == 0
+    runtime.error("No volume is provided by the data vendor.")
+short = ta.ema(volume, shortlen)
+long = ta.ema(volume, longlen)
+osc = 100 * (short - long) / long
+
+// Get ATR value
+atr = ta.atr(atrLength)
+
+// Calculate stops & targets
+longStop  = ta.lowest(low, lookback) - (enableATR ? (atr * multiplier) : 0)
+shortStop = ta.highest(high, lookback) + (enableATR ? (atr * multiplier) : 0)
+longStopDistance  = close - longStop
+shortStopDistance = shortStop - close
+longTarget  = close + (longStopDistance * rr)
+shortTarget = close - (shortStopDistance * rr)
+
+// Save stops & targets
+var t_stop = 0.0
+var t_target = 0.0
+
+buySignal = buy
+sellSignal = sell
+
+buyEntrySignal = buySignal
+ and barstate.isconfirmed
+ and not na(atr)
+ and filterEnableLong
+
+sellEntrySignal = sellSignal
+ and barstate.isconfirmed
+ and not na(atr)
+ and filterEnableShort
+
+buyEntrySignal := filterHull ? buyEntrySignal and hullBullish : buyEntrySignal
+sellEntrySignal := filterHull ? sellEntrySignal and hullBearish : sellEntrySignal
+
+buyEntrySignal := filterSAR ? buyEntrySignal and close > out : buyEntrySignal
+sellEntrySignal := filterSAR ? sellEntrySignal and close < out : sellEntrySignal
+
+buyEntrySignal := filterEmaTrend ? buyEntrySignal and close > trendEma : buyEntrySignal
+sellEntrySignal := filterEmaTrend ? sellEntrySignal and close < trendEma : sellEntrySignal
+
+buyEntrySignal := filterStoch ? buyEntrySignal and d < stochLongMax : buyEntrySignal
+sellEntrySignal := filterStoch ? sellEntrySignal and d > stochShortMin : sellEntrySignal
+
+buyEntrySignal := filterVolumeOsc ? buyEntrySignal and osc > vosc_min : buyEntrySignal
+sellEntrySignal := filterVolumeOsc ? sellEntrySignal and osc > vosc_min : sellEntrySignal
+
+buyEntrySignal := filterWavetrend ? buyEntrySignal and wt1 < 0 : buyEntrySignal
+sellEntrySignal := filterWavetrend ? sellEntrySignal and wt1 > 0 : sellEntrySignal
+
+// Enter buy orders
+if buyEntrySignal
+    t_stop := longStop
+    t_target := longTarget
+    positionSize = math.floor((strategy.equity * (riskPerTrade/100)) / (close - t_stop))
+    strategy.entry(id="Long", direction=strategy.long)
+
+// Enter sell orders
+if sellEntrySignal
+    t_stop := shortStop
+    t_target := shortTarget
+    positionSize = math.floor((strategy.equity * (riskPerTrade/100)) / (t_stop - close))
+    strategy.entry(id="Short", direction=strategy.short)
+
+plotshape(buyEntrySignal, title="Long", style=shape.diamond, color=color.green, location=location.belowbar, size = size.small)
+plotshape(sellEntrySignal, title="Short", style=shape.diamond, color=color.red, location=location.abovebar, size = size.small)
+
+plotshape(buySignal and not buyEntrySignal, title="bull", style=shape.circle, color=color.green, location=location.belowbar, size = size.tiny)
+plotshape(sellSignal and not sellEntrySignal, title="bear", style=shape.circle, color=color.red, location=location.abovebar, size = size.tiny)
+
+// Manage exit orders (TP & SL)
+strategy.exit(id="Long Exit", from_entry="Long", limit=t_target, stop=t_stop, when=strategy.position_size > 0)
+strategy.exit(id="Short Exit", from_entry="Short", limit=t_target, stop=t_stop, when=strategy.position_size < 0)
+
+if sellSignal and strategy.position_size > 0
+    strategy.close("Long", comment="Close Long")
+
+if buySignal and strategy.position_size < 0
+    strategy.close("Short", comment="Close Short")
+
+slColor = t_stop != t_stop[1] ? na : color.red
+tpColor = t_target != t_target[1] ? na : color.green
+
+plot(displayStopLoss ? t_stop : na, title="Stop", color=slColor, style=plot.style_linebr)
+plot(displayTakeProfit ? t_target : na, title="TP", color=tpColor, style=plot.style_linebr)
