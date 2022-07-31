@@ -1,0 +1,114 @@
+//@version=5
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Developer: John EHLERS
+// based on script by © KivancOzbilgic
+indicator('Laguerre RSI', shorttitle='LaRSI', overlay=false)
+
+var g_laguerre= "LaGuerre"
+src = input(title='Source', defval=close, group=g_laguerre)
+alpha = input.float(title='Alpha', minval=0, maxval=1, step=0.1, defval=0.2, group=g_laguerre)
+colorchange = input(title='Change Color ?', defval=false, group=g_laguerre)
+
+var g_tsv = "TSV"
+l = input(22, title='TSV Length', group=g_tsv)
+l_ma = input(55, title='MA Length', group=g_tsv)
+l_ma_short = input(7, title='MA Length', group=g_tsv)
+
+t = math.sum(close > close[1] ? volume * (close - close[1]) : close < close[1] ? volume * (close - close[1]) : 0, l)
+tsv = ta.ema(t, l_ma)
+tsvShort = ta.ema(t, l_ma_short)
+
+tsvTsi = ta.tsi(t, l_ma_short, l_ma)
+
+f_laRsi(src, alpha) =>
+    gamma = 1 - alpha
+    L0 = 0.0
+    L0 := (1 - gamma) * src + gamma * nz(L0[1])
+    L1 = 0.0
+    L1 := -gamma * L0 + nz(L0[1]) + gamma * nz(L1[1])
+
+    L2 = 0.0
+    L2 := -gamma * L1 + nz(L1[1]) + gamma * nz(L2[1])
+
+    L3 = 0.0
+    L3 := -gamma * L2 + nz(L2[1]) + gamma * nz(L3[1])
+
+    cu = (L0 > L1 ? L0 - L1 : 0) + (L1 > L2 ? L1 - L2 : 0) + (L2 > L3 ? L2 - L3 : 0)
+
+    cd = (L0 < L1 ? L1 - L0 : 0) + (L1 < L2 ? L2 - L1 : 0) + (L2 < L3 ? L3 - L2 : 0)
+
+    temp = cu + cd == 0 ? -1 : cu + cd
+    LaRSI = temp == -1 ? 0 : cu / temp
+    LaRSI
+
+LaRSI = f_laRsi(src, alpha)
+
+LaRSI12m = request.security(syminfo.tickerid, '12', f_laRsi(close, alpha))
+LaRSI45m = request.security(syminfo.tickerid, '45', f_laRsi(close, alpha))
+LaRSI3h = request.security(syminfo.tickerid, '180', f_laRsi(close, alpha))
+LaRSI6h = request.security(syminfo.tickerid, '360', f_laRsi(close, alpha))
+LaRSI12h = request.security(syminfo.tickerid, '720', f_laRsi(close, alpha))
+LaRSI1d = request.security(syminfo.tickerid, '1440', f_laRsi(close, alpha))
+LaRSI3d = request.security(syminfo.tickerid, '3D', f_laRsi(close, alpha))
+LaRSI1w = request.security(syminfo.tickerid, '1W', f_laRsi(close, alpha))
+
+isBullish = 100 * LaRSI < 20.0
+isBearish = 100 * LaRSI > 80.0
+showBullish = isBullish and tsvShort > tsvTsi
+showBearish = isBearish and tsvShort < tsvTsi
+
+bgOpacity = isBullish ? 90 : isBearish ? 90 : 100
+
+if timeframe.isminutes
+    if timeframe.multiplier < 12
+        isBullish := isBullish and LaRSI12m * 100 < 20
+        isBearish := isBearish and LaRSI12m * 100 > 80
+        if isBullish or isBearish
+            bgOpacity := bgOpacity - 2
+    if timeframe.multiplier < 45
+        isBullish := isBullish and LaRSI45m * 100 < 20
+        isBearish := isBearish and LaRSI45m * 100 > 80
+        if isBullish or isBearish
+            bgOpacity := bgOpacity - 2
+    if timeframe.multiplier < 180
+        isBullish := isBullish and LaRSI3h * 100 < 20
+        isBearish := isBearish and LaRSI3h * 100 > 80
+        if isBullish or isBearish
+            bgOpacity := bgOpacity - 3
+    if timeframe.multiplier < 360
+        isBullish := isBullish and LaRSI6h * 100 < 20
+        isBearish := isBearish and LaRSI6h * 100 > 80
+        if isBullish or isBearish
+            bgOpacity := bgOpacity - 3
+    if timeframe.multiplier < 720
+        isBullish := isBullish and LaRSI12h * 100 < 20
+        isBearish := isBearish and LaRSI12h * 100 > 80
+        if isBullish or isBearish
+            bgOpacity := bgOpacity - 3
+    if timeframe.multiplier < 1440
+        isBullish := isBullish and LaRSI1d * 100 < 20
+        isBearish := isBearish and LaRSI1d * 100 > 80
+        if isBullish or isBearish
+            bgOpacity := bgOpacity - 3
+
+    isBullish := isBullish and LaRSI3d * 100 < 20
+    isBearish := isBearish and LaRSI3d * 100 > 80
+    if isBullish or isBearish
+        bgOpacity := bgOpacity - 3
+
+    isBullish := isBullish and LaRSI1w * 100 < 20
+    isBearish := isBearish and LaRSI1w * 100 > 80
+    if isBullish or isBearish
+        bgOpacity := bgOpacity - 5
+
+bgColor = showBearish ? color.new(color.red, bgOpacity) : showBullish ? color.new(color.green, bgOpacity) : na
+
+min = plot(0.0, title="Min", color=color.new(color.white, 90), linewidth=1)
+max = plot(100.0, title="Max", color=color.new(color.white, 90), linewidth=1)
+
+fill(min, max, title = "Background", color = bgColor, title='Fill')
+
+Color = colorchange ? LaRSI > LaRSI[1] ? color.green : color.red : color.yellow
+plot(100 * LaRSI, title='LaRSI', linewidth=2, color=Color, transp=0)
+plot(20, linewidth=1, color=color.new(color.white, 50))
+plot(80, linewidth=1, color=color.new(color.white, 50))
