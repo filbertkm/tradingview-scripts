@@ -52,56 +52,73 @@ LaRSI1d = request.security(syminfo.tickerid, '1440', f_laRsi(close, alpha))
 LaRSI3d = request.security(syminfo.tickerid, '3D', f_laRsi(close, alpha))
 LaRSI1w = request.security(syminfo.tickerid, '1W', f_laRsi(close, alpha))
 
-isBullish = 100 * LaRSI < 20.0
-isBearish = 100 * LaRSI > 80.0
-showBullish = isBullish and tsvShort > tsvTsi
-showBearish = isBearish and tsvShort < tsvTsi
+isBullish = 100 * LaRSI < 10.0 and LaRSI > LaRSI[1]
+isBearish = 100 * LaRSI > 90.0 and LaRSI < LaRSI[1]
+showBullish = isBullish
+showBearish = isBearish
 
-bgOpacity = isBullish ? 90 : isBearish ? 90 : 100
+bullishOpacity = isBullish ? 90 : 100
+bearishOpacity = isBearish ? 90 : 100
 
 if timeframe.isminutes
     if timeframe.multiplier < 12
-        isBullish := isBullish and LaRSI12m * 100 < 20
-        isBearish := isBearish and LaRSI12m * 100 > 80
-        if isBullish or isBearish
-            bgOpacity := bgOpacity - 2
+        isBullish := isBullish and LaRSI12m * 100 < 10
+        isBearish := isBearish and LaRSI12m * 100 > 90
+        if isBullish
+            bullishOpacity := bullishOpacity - 3
+        if isBearish
+            bearishOpacity := bearishOpacity - 3
     if timeframe.multiplier < 45
-        isBullish := isBullish and LaRSI45m * 100 < 20
-        isBearish := isBearish and LaRSI45m * 100 > 80
-        if isBullish or isBearish
-            bgOpacity := bgOpacity - 2
+        isBullish := isBullish and LaRSI45m * 100 < 10
+        isBearish := isBearish and LaRSI45m * 100 > 90
+        if isBullish
+            bullishOpacity := bullishOpacity - 3
+        if isBearish
+            bearishOpacity := bearishOpacity - 3
     if timeframe.multiplier < 180
-        isBullish := isBullish and LaRSI3h * 100 < 20
-        isBearish := isBearish and LaRSI3h * 100 > 80
-        if isBullish or isBearish
-            bgOpacity := bgOpacity - 3
+        isBullish := isBullish and LaRSI3h * 100 < 10
+        isBearish := isBearish and LaRSI3h * 100 > 90
+        if isBullish
+            bullishOpacity := bullishOpacity - 4
+        if isBearish
+            bearishOpacity := bearishOpacity - 4
     if timeframe.multiplier < 360
-        isBullish := isBullish and LaRSI6h * 100 < 20
-        isBearish := isBearish and LaRSI6h * 100 > 80
-        if isBullish or isBearish
-            bgOpacity := bgOpacity - 3
+        isBullish := isBullish and LaRSI6h * 100 < 10
+        isBearish := isBearish and LaRSI6h * 100 > 90
+        if isBullish
+            bullishOpacity := bullishOpacity - 4
+        if isBearish
+            bearishOpacity := bearishOpacity - 4
     if timeframe.multiplier < 720
-        isBullish := isBullish and LaRSI12h * 100 < 20
-        isBearish := isBearish and LaRSI12h * 100 > 80
-        if isBullish or isBearish
-            bgOpacity := bgOpacity - 3
+        isBullish := isBullish and LaRSI12h * 100 < 10
+        isBearish := isBearish and LaRSI12h * 100 > 90
+        if isBullish
+            bullishOpacity := bullishOpacity - 4
+        if isBearish
+            bearishOpacity := bearishOpacity - 4
     if timeframe.multiplier < 1440
-        isBullish := isBullish and LaRSI1d * 100 < 20
-        isBearish := isBearish and LaRSI1d * 100 > 80
-        if isBullish or isBearish
-            bgOpacity := bgOpacity - 3
+        isBullish := isBullish and LaRSI1d * 100 < 10
+        isBearish := isBearish and LaRSI1d * 100 > 90
+        if isBullish
+            bullishOpacity := bullishOpacity - 4
+        if isBearish
+            bearishOpacity := bearishOpacity - 4
 
-    isBullish := isBullish and LaRSI3d * 100 < 20
-    isBearish := isBearish and LaRSI3d * 100 > 80
-    if isBullish or isBearish
-        bgOpacity := bgOpacity - 3
+    isBullish := isBullish and LaRSI3d * 100 < 10
+    isBearish := isBearish and LaRSI3d * 100 > 90
+    if isBullish
+        bullishOpacity := bullishOpacity - 4
+    if isBearish
+        bearishOpacity := bearishOpacity - 4
 
-    isBullish := isBullish and LaRSI1w * 100 < 20
-    isBearish := isBearish and LaRSI1w * 100 > 80
-    if isBullish or isBearish
-        bgOpacity := bgOpacity - 5
+    isBullish := isBullish and LaRSI1w * 100 < 10
+    isBearish := isBearish and LaRSI1w * 100 > 90
+    if isBullish
+        bullishOpacity := bullishOpacity - 4
+    if isBearish
+        bearishOpacity := bearishOpacity - 4
 
-bgColor = showBearish ? color.new(color.red, bgOpacity) : showBullish ? color.new(color.green, bgOpacity) : na
+bgColor = showBearish ? color.new(color.red, bearishOpacity) : showBullish ? color.new(color.green, bullishOpacity) : na
 
 min = plot(0.0, title="Min", color=color.new(color.white, 90), linewidth=1)
 max = plot(100.0, title="Max", color=color.new(color.white, 90), linewidth=1)
